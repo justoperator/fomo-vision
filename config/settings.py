@@ -47,3 +47,46 @@ TEMPLATES = [{
         "studio.context.assets",
     ]},
 }]
+
+DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
+# PostgreSQL:
+# DATABASES = {"default": {"ENGINE": "django.db.backends.postgresql", "NAME": "fomo", "USER": "fomo",
+#              "PASSWORD": "fomo", "HOST": "127.0.0.1", "PORT": "5432"}}
+
+REDIS_URL = os.environ.get("REDIS_URL")
+if REDIS_URL:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels_redis.core.RedisChannelLayer",
+                                  "CONFIG": {"hosts": [REDIS_URL]}}}
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator", "OPTIONS": {"min_length": 6}},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+]
+
+LANGUAGE_CODE = "en"
+TIME_ZONE = "Europe/Kyiv"
+USE_I18N = True
+USE_TZ = True
+
+STATIC_URL = "/static/"
+STATICFILES_DIRS = [BASE_DIR / "static"]
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
+
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"  # uploaded .tflite models are stored here
+DATA_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024
+FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
+
+LOGIN_URL = "/accounts/"
+LOGIN_REDIRECT_URL = "/projects/"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# ---- Model (worker) resource limits
+FOMO_MAX_RAM_MB = int(os.environ.get("FOMO_MAX_RAM_MB", "100"))      # ceiling that can be set in the UI
+FOMO_HARD_MEMORY = os.environ.get("FOMO_HARD_MEMORY", "1") == "1"    # 0 = watchdog only (no Job/cgroup RAM limit)

@@ -177,3 +177,96 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
                 await asyncio.sleep(0.5)
         except asyncio.CancelledError:
             pass
+
+    async def receive(self, text_data=None, bytes_data=None):
+        try:
+            data = json.loads(text_data or "{}")
+        except ValueError:
+            return
+        perms = await _member_perms(self.scope["user"], self.pid)  # permissions can change on the fly
+        if not perms:
+            return
+        t = data.get("type")
+        if t == "set_settings":
+            keys = set(data) - {"type"}
+            # brightness may also be changed by anyone allowed to send video
+            if perms["control"] or (perms["stream"] and keys <= {"brightness"}):
+                await self._apply_settings(data)
+        elif t == "reset_tracker" and perms["control"]:
+            self.rt.trackers.clear()
+            self.rt.log("INFO", "Numbering reset")
+        elif t == "draw" and perms["draw"]:
+            stroke = data.get("stroke")
+            if isinstance(stroke, dict) and isinstance(stroke.get("pts"), list):
+                self.rt.strokes.append(stroke)
+                del self.rt.strokes[:-500]
+                await self.channel_layer.group_send(self.group, {
+                    "type": "broadcast", "payload": {"type": "draw", "stroke": stroke}, "skip": self.channel_name})
+        elif t == "clear_draw" and perms["draw"]:
+            self.rt.strokes.clear()
+            await self.channel_layer.group_send(self.group, {"type": "broadcast", "payload": {"type": "clear_draw"}})
+
+    async def _apply_settings(self, data):
+        rt = self.rt
+        if "threshold" in data:
+            rt.settings["threshold"] = max(0.05, min(0.99, float(data["threshold"])))
+        if "unique" in data:
+            rt.settings["unique"] = bool(data["unique"])
+        if "numbering" in data:
+            rt.settings["numbering"] = bool(data["numbering"])
+            rt.trackers.clear()
+        if "brightness" in data:
+            rt.settings["brightness"] = max(20, min(250, int(float(data["brightness"]))))
+        if "limits" in data:
+            rt.settings["limits"] = sandbox.clamp_limits(data["limits"])
+            if rt.active and rt.settings.get("running", True):
+                await self.send_json({"type": "loading", "msg": "Restarting the worker with new limits…"})
+                try:
+                    await asyncio.to_thread(rt.restart_worker)
+                except Exception as e:  # noqa
+                    await self.send_json({"type": "error", "msg": str(e)})
+        if "model_id" in data:
+            mid = data["model_id"]
+            if mid is None:
+                await asyncio.to_thread(rt.deactivate)
+                rt.settings["model_id"] = None
+            else:
+                meta = await _model_meta(self.pid, int(mid))
+                if not meta:
+                    return await self.send_json({"type": "error", "msg": "Model not found"})
+                try:
+                    await self.send_json({"type": "loading", "msg": f"Loading “{meta['name']}”…"})
+                    await asyncio.to_thread(rt.activate, meta)
+                    rt.settings["model_id"] = meta["id"]
+                    rt.settings["running"] = True
+                except Exception as e:  # noqa
+                    rt.settings["model_id"] = None
+                    await _save_project_settings(self.pid, rt.settings)
+                    await self.channel_layer.group_send(self.group, {
+                        "type": "broadcast", "payload": {"type": "settings", "settings": rt.settings}})
+                    return await self.send_json({"type": "error", "msg": f"Model error: {e}"})
+        if "running" in data and "model_id" not in data:
+            if data["running"]:
+                if not rt._meta:
+                    await self.send_json({"type": "error", "msg": "Choose a model first"})
+                else:
+                    await self.send_json({"type": "loading", "msg": "Starting the model…"})
+                    try:
+                        await asyncio.to_thread(rt.start_model)
+                    except Exception as e:  # noqa
+                        rt.settings["running"] = False
+                        await self.send_json({"type": "error", "msg": f"Could not start: {e}"})
+            else:
+                await asyncio.to_thread(rt.stop_model)
+        await _save_project_settings(self.pid, rt.settings)
+        await self.channel_layer.group_send(self.group, {
+            "type": "broadcast", "payload": {"type": "settings", "settings": rt.settings}})
+
+    async def kick(self, event):
+        if self.scope["user"].id == event["user_id"]:
+            await self.close(code=4403)
+
+    async def broadcast(self, event):
+        if event.get("skip") == self.channel_name:
+            return
+        await self.send_json(event["payload"])

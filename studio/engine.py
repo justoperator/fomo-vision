@@ -188,3 +188,96 @@ class ProjectRuntime:
                          f"{info['input_dtype']} · limits: RAM {lim['ram_mb']} MB, CPU {lim['cpu_percent']}% × "
                          f"{lim['cpu_cores']} core(s), timeout {lim['timeout_s']} s")
         self.log("INFO", "Enforcement: " + "; ".join(w.enforcement))
+
+    def restart_worker(self):
+        if self._meta and self.active and self.settings.get("running", True):
+            self.activate(self._meta)
+
+    def prepare_stopped(self, meta):
+        """Model selected but the worker is not started (the “stopped” state after a server restart)."""
+        self._meta = meta
+        self.active = Active(meta["id"], meta["name"], meta["labels"], None)
+
+    def stop_model(self):
+        """Stops the worker (frees RAM) but keeps the model selection so it can be started again."""
+        self._stop_worker()
+        self.settings["running"] = False
+        self.trackers.clear()
+        self.log("INFO", "Model stopped, worker shut down — memory freed")
+
+    def start_model(self):
+        if not self._meta:
+            raise WorkerError("Choose a model first")
+        self.activate(self._meta)
+
+    def deactivate(self):
+        self._stop_worker()
+        self.active, self._meta = None, None
+        self.settings["model_id"] = None
+        self.trackers.clear()
+        self.log("INFO", "Model unloaded, worker stopped")
+
+    def update_labels(self, mid, labels):
+        if self.active and self.active.id == mid:
+            self.active.labels = labels
+
+    def drop_model(self, mid):
+        if self.active and self.active.id == mid:
+            self.deactivate()
+            self.settings["model_id"] = None
+
+    # --- frame
+    def process(self, jpeg, source):
+        brightness = max(20, min(250, int(self.settings.get("brightness", 100))))
+        self.frame_id += 1
+        fid, t0 = self.frame_id, time.perf_counter()
+        base = {"frame_id": fid, "inference_ms": 0, "predictions": [], "counts": {}, "unique_total": {},
+                "brightness": brightness}
+        am, w = self.active, self.worker
+        if am is None:
+            return {**base, "error": self._last_err or "No model selected"}
+        if not self.settings.get("running", True):
+            return {**base, "stopped": True}  # video keeps flowing, detection is off
+        if w is None:
+            return {**base, "error": self._last_err or "Worker is not running"}
+        s = self.settings
+        try:
+            grid, inf_ms = w.infer(jpeg, brightness)
+        except WorkerError as e:
+            msg = str(e)
+            if msg != self._last_err:
+                self._last_err = msg
+                self.log("ERROR", msg)
+            return {**base, "error": msg}
+        self._last_err = None
+        objs = extract_objects(grid, s["threshold"], s["unique"])
+        tracker = self.trackers.setdefault(source, Tracker())
+        if s["numbering"]:
+            tracker.update(objs)
+        counts = collections.Counter()
+        for o in objs:
+            lab = am.labels[o["class_id"]] if o["class_id"] < len(am.labels) else {}
+            o["label"] = lab.get("name", f"Class {o['class_id']}")
+            o["color"] = lab.get("color", "#ff5a1f")
+            o["description"] = lab.get("description", "")
+            counts[o["label"]] += 1
+        self.times.append(time.time())
+        self.latency.append((time.perf_counter() - t0) * 1000)
+        sig = tuple(sorted(counts.items()))
+        if sig != self._last_sig:
+            self._last_sig = sig
+            self.log("INFO", "Detected: " + (", ".join(f"{k}×{v}" for k, v in sig) or "nothing"))
+        if fid % 100 == 0:
+            self.log("DEBUG", f"{fid} frames, inference {inf_ms:.1f} ms, grid {grid.shape[1]}x{grid.shape[0]}")
+        return {"frame_id": fid, "inference_ms": round(inf_ms, 2), "predictions": objs, "brightness": brightness,
+                "counts": dict(counts), "grid": [grid.shape[1], grid.shape[0]],
+                "unique_total": {(am.labels[c]["name"] if c < len(am.labels) else str(c)): n
+                                 for c, n in tracker.total.items()} if s["numbering"] else {}}
+
+    def metrics(self):
+        fps = 0.0
+        if len(self.times) > 1 and time.time() - self.times[-1] < 2:
+            fps = (len(self.times) - 1) / max(self.times[-1] - self.times[0], 1e-6)
+        lat = sum(self.latency) / len(self.latency) if self.latency and fps else 0.0
+        return {**{k: round(v, 1) for k, v in _SYS.items()}, "fps": round(fps, 1), "latency_ms": round(lat, 1),
+                "worker": self.worker.stats() if self.worker else None}

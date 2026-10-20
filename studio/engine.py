@@ -92,3 +92,99 @@ class Tracker:
                 if self.tracks[tid]["missed"] > self.max_missed:
                     del self.tracks[tid]
         return objs
+
+
+# ----------------------------------------------------------------------------- system metrics
+_SYS = {"cpu": 0.0, "proc_cpu": 0.0, "ram_used_mb": 0.0, "ram_total_mb": 0.0, "ram_percent": 0.0}
+_sampler_started = False
+_runtimes = {}
+_rt_lock = threading.Lock()
+
+
+def _sampler():
+    proc = psutil.Process()
+    proc.cpu_percent(None)
+    psutil.cpu_percent(None)
+    while True:
+        time.sleep(0.5)
+        vm = psutil.virtual_memory()
+        _SYS.update(cpu=psutil.cpu_percent(None), proc_cpu=proc.cpu_percent(None),
+                    ram_used_mb=proc.memory_info().rss / 1048576, ram_total_mb=vm.total / 1048576,
+                    ram_percent=vm.percent)
+
+
+def get_runtime(pid):
+    global _sampler_started
+    with _rt_lock:
+        if not _sampler_started:
+            threading.Thread(target=_sampler, daemon=True, name="metrics").start()
+            _sampler_started = True
+        if pid not in _runtimes:
+            _runtimes[pid] = ProjectRuntime(pid)
+        return _runtimes[pid]
+
+
+class Active:
+    def __init__(self, mid, name, labels, info):
+        self.id, self.name, self.labels, self.info = mid, name, labels, info
+
+
+class ProjectRuntime:
+    def __init__(self, pid):
+        self.pid = pid
+        self.initialized = False
+        self.settings = {"model_id": None, "threshold": 0.7, "unique": True, "numbering": False,
+                         "running": True, "brightness": 100, "limits": default_limits()}
+        self.active = None
+        self.worker = None
+        self._meta = None
+        self._last_err = None
+        self.logs = collections.deque(maxlen=400)
+        self.log_seq = 0
+        self.trackers = {}
+        self.frame_id = 0
+        self.times = collections.deque(maxlen=30)
+        self.latency = collections.deque(maxlen=30)
+        self.strokes = []
+        self.presence = {}
+        self._last_sig = None
+        self._lock = threading.Lock()
+
+    # --- logs
+    def log(self, level, msg):
+        with self._lock:
+            self.log_seq += 1
+            self.logs.append((self.log_seq, {"ts": time.time(), "level": level, "msg": msg}))
+
+    def logs_since(self, seq):
+        with self._lock:
+            return [e for s, e in self.logs if s > seq], self.log_seq
+
+    # --- model / worker
+    def _stop_worker(self):
+        if self.worker:
+            self.worker.stop()
+            self.worker = None
+
+    def activate(self, meta):
+        self._stop_worker()
+        self.active, self._meta, self._last_err = None, meta, None
+        lim = clamp_limits(self.settings.get("limits"))
+        self.settings["limits"] = lim
+        w = ModelWorker(meta["path"], lim, self.log)
+        try:
+            info = w.start()
+        except WorkerError as e:
+            w.stop()
+            self._last_err = str(e)
+            self.log("ERROR", str(e))
+            raise
+        self.settings["running"] = True
+        self.worker = w
+        self.active = Active(meta["id"], meta["name"], meta["labels"], info)
+        self.trackers.clear()
+        self.log("INFO", f"Model “{meta['name']}” ready in {info['load_ms']} ms · engine {info['engine']} · "
+                         f"input {info['input_width']}x{info['input_height']}x{info['input_channels']} "
+                         f"{info['input_dtype']} · limits: RAM {lim['ram_mb']} MB, CPU {lim['cpu_percent']}% × "
+                         f"{lim['cpu_cores']} core(s), timeout {lim['timeout_s']} s")
+        self.log("INFO", "Enforcement: " + "; ".join(w.enforcement))

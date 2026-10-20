@@ -79,3 +79,101 @@ class StreamConsumer(AsyncWebsocketConsumer):
         if hasattr(self, "group"):
             await self.channel_layer.group_discard(self.group, self.channel_name)
             self.rt.trackers.pop(self.channel_name, None)
+
+    async def receive(self, text_data=None, bytes_data=None):
+        if not bytes_data or not self.can_stream:
+            return
+        if time.time() - self._chk > 5:  # permissions/invites may have changed during the stream
+            self._chk = time.time()
+            if self.kind == "user":
+                perms = await _member_perms(self.scope["user"], self.pid)
+                if not perms:
+                    return await self.close(code=4403)
+                self.can_stream = perms["stream"]
+            elif not await _device_ok(self.pid, self.token):
+                return await self.close(code=4403)
+            if not self.can_stream:
+                return
+        jpeg = _jpeg(bytes_data)  # clean video frame (no canvas drawings); brightness is added by ProjectRuntime
+        result = await asyncio.to_thread(self.rt.process, jpeg, self.channel_name)
+        result["source"] = self.name
+        head = json.dumps(result, ensure_ascii=False).encode()
+        packet = len(head).to_bytes(4, "big") + head + jpeg
+        await self.channel_layer.group_send(self.group, {"type": "packet", "data": packet})
+        await self.send(text_data='{"type":"ack"}')
+
+    async def packet(self, event):
+        await self.send(bytes_data=event["data"])
+
+    async def kick(self, event):
+        if self.scope["user"].id == event["user_id"]:
+            await self.close(code=4403)
+
+
+class TelemetryConsumer(AsyncWebsocketConsumer):
+    """/ws/telemetry/<pid>/ — metrics, logs, shared settings, drawing, presence."""
+
+    async def connect(self):
+        self.pid = self.scope["url_route"]["kwargs"]["pid"]
+        user = self.scope["user"]
+        perms = await _member_perms(user, self.pid)
+        if not perms:
+            await self.close(code=4403)
+            return
+        self.rt = get_runtime(self.pid)
+        self.group = f"ctl_{self.pid}"
+        await self.channel_layer.group_add(self.group, self.channel_name)
+        await self.accept()
+        if not self.rt.initialized:
+            await self._init_runtime()
+        self.rt.presence[self.channel_name] = user.username
+        self.task = asyncio.create_task(self._pump())
+        await self.send_json({"type": "hello", "settings": self.rt.settings, "strokes": self.rt.strokes,
+                              "perms": perms,
+                              "caps": sandbox.caps()})
+        await self._broadcast_presence()
+
+    async def _init_runtime(self):
+        saved = await _load_project_settings(self.pid)
+        self.rt.settings.update({k: v for k, v in saved.items() if k in self.rt.settings})
+        self.rt.settings["limits"] = sandbox.clamp_limits(self.rt.settings.get("limits"))
+        self.rt.initialized = True
+        self.rt.settings["brightness"] = max(20, min(250, int(self.rt.settings.get("brightness", 100))))
+        mid = self.rt.settings.get("model_id")
+        if mid:
+            meta = await _model_meta(self.pid, mid)
+            if meta and self.rt.settings.get("running", True):
+                try:
+                    await asyncio.to_thread(self.rt.activate, meta)
+                except Exception as e:  # noqa
+                    self.rt.log("ERROR", f"Could not load the model: {e}")
+            elif meta:
+                self.rt.prepare_stopped(meta)
+
+    async def disconnect(self, code):
+        if not hasattr(self, "group"):
+            return
+        if hasattr(self, "task"):
+            self.task.cancel()
+        self.rt.presence.pop(self.channel_name, None)
+        await self.channel_layer.group_discard(self.group, self.channel_name)
+        await self._broadcast_presence()
+
+    async def send_json(self, obj):
+        await self.send(text_data=json.dumps(obj, ensure_ascii=False))
+
+    async def _broadcast_presence(self):
+        await self.channel_layer.group_send(self.group, {
+            "type": "broadcast", "payload": {"type": "presence", "online": sorted(set(self.rt.presence.values()))}})
+
+    async def _pump(self):
+        _, last = self.rt.logs_since(0)
+        last = max(0, last - 40)
+        try:
+            while True:
+                logs, last = self.rt.logs_since(last)
+                await self.send_json({"type": "telemetry", "timestamp": time.time(),
+                                      "system": self.rt.metrics(), "logs": logs})
+                await asyncio.sleep(0.5)
+        except asyncio.CancelledError:
+            pass

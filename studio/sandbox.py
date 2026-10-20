@@ -210,3 +210,140 @@ class ModelWorker:
         self._pobj = {}
         self._starts = collections.deque(maxlen=4)
         self.generation = 0
+
+    # --- start
+    def start(self):
+        lim = self.limits
+        self.generation += 1
+        gen = self.generation
+        self.q = queue.Queue()
+        self.kill_reason = None
+        self._stopping = False
+        self.enforcement = []
+        self.uss = self.peak = self.cpu = 0.0
+        self._pobj = {}
+        prefix, grp = [], None
+        if not IS_WIN:
+            grp, notes = _cg_create(lim, f"w{os.getpid()}_{gen}")
+            self.enforcement += notes
+            if grp:
+                self._cg = grp
+            elif _systemd_ok():
+                props = [f"CPUQuota={int(lim['cpu_percent'] * lim['cpu_cores'])}%"]
+                if settings.FOMO_HARD_MEMORY:
+                    props += [f"MemoryMax={lim['ram_mb']}M", "MemorySwapMax=0"]
+                prefix = ["systemd-run", "--user", "--scope", "--quiet", "--collect"]
+                for p in props:
+                    prefix += ["-p", p]
+                self.enforcement.append("systemd --user scope: " + ", ".join(props))
+        self.proc = subprocess.Popen(prefix + [sys.executable, WORKER], stdin=subprocess.PIPE,
+                                     stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=_env(),
+                                     creationflags=_flags())
+        self.ps = psutil.Process(self.proc.pid)
+        if grp:
+            try:
+                with open(grp + "/cgroup.procs", "w") as f:
+                    f.write(str(self.proc.pid))
+            except OSError as e:
+                self.enforcement.append(f"cgroup.procs: {e}")
+        if IS_WIN:
+            try:  # the Windows venv launcher spawns a child python — the Job must cover both
+                venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
+                end, pids = time.time() + 1.5, set()
+                while True:
+                    pids |= {self.proc.pid} | {c.pid for c in self.ps.children(recursive=True)}
+                    if len(pids) > 1 or not venv or time.time() > end:
+                        break
+                    time.sleep(0.05)
+                self._job, notes = _win_job(lim, pids)
+                self.enforcement += notes
+            except Exception as e:  # noqa
+                self.enforcement.append(f"Job Object unavailable: {e}")
+        try:
+            cpus = sorted(self.ps.cpu_affinity())[:lim["cpu_cores"]]
+            self.ps.cpu_affinity(cpus)
+            self.enforcement.append(f"affinity {len(cpus)} core(s)")
+        except Exception:  # noqa
+            pass
+        self.enforcement.append(f"watchdog RAM ≤ {lim['ram_mb']} MB")
+        for fn in (self._read_out, self._read_err, self._watch):
+            threading.Thread(target=fn, args=(gen,), daemon=True).start()
+        self._send(b"C", json.dumps({"model_path": self.path, "cores": lim["cpu_cores"],
+                                     "cpu_percent": lim["cpu_percent"]}).encode())
+        t0, deadline = time.time(), time.time() + 120
+        while True:
+            try:
+                kind, payload = self.q.get(timeout=0.5)
+            except queue.Empty:
+                if time.time() > deadline:
+                    self.kill("startup")
+                    raise self._died("Worker start-up timed out")
+                continue
+            if kind == b"I":
+                self.info = json.loads(payload)
+                self.info["load_ms"] = int((time.time() - t0) * 1000)
+                self._starts.append(time.time())
+                return self.info
+            if kind == b"X":
+                raise self._died()
+
+    def _send(self, kind, payload=b""):
+        try:
+            self.proc.stdin.write(kind + struct.pack(">I", len(payload)) + payload)
+            self.proc.stdin.flush()
+        except (OSError, ValueError):
+            raise self._died()
+
+    def _read_out(self, gen):
+        out = self.proc.stdout
+        try:
+            while True:
+                head = out.read(5)
+                if len(head) < 5:
+                    break
+                n = struct.unpack(">I", head[1:])[0]
+                self.q.put((head[:1], out.read(n) if n else b""))
+        except (OSError, ValueError):
+            pass
+        if gen == self.generation:
+            self.q.put((b"X", b""))
+
+    def _read_err(self, gen):
+        try:
+            for raw in iter(self.proc.stderr.readline, b""):
+                line = raw.decode("utf-8", "replace").rstrip()
+                if not line:
+                    continue
+                self.err_tail.append(line)
+                low = line.lower()
+                lvl = "ERROR" if any(k in low for k in ("error", "traceback", "memory", "exception")) else \
+                      "WARN" if low.startswith("warn") else "INFO"
+                if gen == self.generation:
+                    self.log(lvl, "[worker] " + line[:300])
+        except (OSError, ValueError):
+            pass
+
+    def _watch(self, gen):
+        lim = self.limits
+        cap = lim["ram_mb"] * 1048576
+        while gen == self.generation and not self._stopping and self.proc.poll() is None:
+            try:
+                mem, cpu = 0, 0.0
+                for p in [self.ps] + self.ps.children(recursive=True):
+                    p = self._pobj.setdefault(p.pid, p)
+                    try:
+                        try:
+                            mem += p.memory_full_info().uss
+                        except (psutil.AccessDenied, AttributeError, NotImplementedError):
+                            mem += p.memory_info().rss
+                        cpu += p.cpu_percent(None)
+                    except psutil.NoSuchProcess:
+                        pass
+                self.uss, self.cpu = mem / 1048576, cpu / lim["cpu_cores"]
+                self.peak = max(self.peak, self.uss)
+                if mem > cap * 1.02:
+                    self.kill("ram")
+                    return
+            except psutil.NoSuchProcess:
+                return
+            time.sleep(0.25)

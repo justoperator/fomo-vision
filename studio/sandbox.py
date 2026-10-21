@@ -347,3 +347,105 @@ class ModelWorker:
             except psutil.NoSuchProcess:
                 return
             time.sleep(0.25)
+
+    # --- frame
+    def alive(self):
+        return bool(self.proc) and self.proc.poll() is None
+
+    def infer(self, jpeg, brightness=100):
+        with self.lock:
+            if self.fatal:
+                raise WorkerError(self.fatal)
+            if not self.alive() and self.kill_reason == "ram":
+                raise self._died()  # the watchdog killed the worker for exceeding RAM — fatal until the limit changes
+            if not self.alive():
+                recent = [t for t in self._starts if time.time() - t < 60]
+                if len(recent) >= 3:
+                    self.fatal = "The worker keeps crashing — stopped. Check the logs and press “Apply”."
+                    raise WorkerError(self.fatal)
+                self.log("WARN", "Restarting the worker…")
+                self.start()
+            self._send(b"F", struct.pack(">H", max(20, min(250, int(brightness)))) + jpeg)
+            try:
+                kind, p = self.q.get(timeout=self.limits["timeout_s"])
+            except queue.Empty:
+                self.kill("timeout")
+                raise WorkerError(f"Frame timeout ({self.limits['timeout_s']} s) — worker restarted")
+            if kind == b"R":
+                n = struct.unpack(">I", p[:4])[0]
+                head = json.loads(p[4:4 + n])
+                grid = np.frombuffer(p[4 + n:], dtype="<f4").reshape(head["shape"])
+                return grid, head["ms"]
+            if kind == b"E":
+                raise WorkerError(p.decode("utf-8", "replace"))
+            raise self._died()
+
+    # --- shutdown
+    def kill(self, reason):
+        self.kill_reason = reason
+        try:
+            for p in self.ps.children(recursive=True) + [self.ps]:
+                try:
+                    p.kill()
+                except psutil.NoSuchProcess:
+                    pass
+        except psutil.NoSuchProcess:
+            pass
+        try:
+            self.proc.wait(timeout=3)  # wait for exit so alive() is immediately accurate
+        except Exception:  # noqa
+            pass
+
+    def _died(self, prefix=None):
+        try:
+            code = self.proc.wait(timeout=2)
+        except Exception:  # noqa
+            code = self.proc.poll()
+        time.sleep(0.15)
+        tail = " | ".join(list(self.err_tail)[-3:])
+        lim = self.limits
+        blob = tail.lower()
+        oom = self.kill_reason == "ram" or "memoryerror" in blob or "bad_alloc" in blob or "cannot allocate" in blob \
+            or code in (-9, 137, 3, 0xC0000017, 3221225495)
+        if self.kill_reason == "timeout":
+            msg = f"Frame timeout ({lim['timeout_s']} s) — worker restarted"
+        elif oom:
+            msg = (f"Not enough RAM within the {lim['ram_mb']} MB limit (peak ≈ {self.peak:.0f} MB). "
+                   f"Raise the limit or use a lighter engine (ai-edge-litert).")
+            self.fatal = msg
+        else:
+            msg = (prefix or f"Worker exited (code {code})") + (f": {tail}" if tail else "")
+            self.fatal = msg
+        return WorkerError(msg)
+
+    def stop(self):
+        self._stopping = True
+        self.generation += 1
+        try:
+            if self.alive():
+                try:
+                    self._send(b"Q")
+                except WorkerError:
+                    pass
+                try:
+                    self.proc.wait(timeout=1)
+                except Exception:  # noqa
+                    self.kill("stop")
+        except Exception:  # noqa
+            pass
+        if self._job and IS_WIN:
+            _k32.CloseHandle(self._job)
+            self._job = None
+        if self._cg:
+            for _ in range(10):
+                try:
+                    os.rmdir(self._cg)
+                    break
+                except OSError:
+                    time.sleep(0.05)
+            self._cg = None
+
+    def stats(self):
+        return {"alive": self.alive(), "rss_mb": round(self.uss, 1), "peak_mb": round(self.peak, 1),
+                "cpu": round(min(self.cpu, 999), 1), "enforcement": self.enforcement,
+                "engine": (self.info or {}).get("engine"), "fatal": self.fatal}

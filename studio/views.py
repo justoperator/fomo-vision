@@ -246,3 +246,107 @@ def model_upload(request, pid):
     _notify(pid, "models")
     return JsonResponse({"ok": True, "id": m.id, "warning": None if info["is_fomo"] else
                          "The model output does not look like FOMO (expected [1, H, W, classes])."})
+
+
+@login_required
+@require_POST
+@guarded
+def model_update(request, pid, mid):
+    me = _member(request, pid, "upload")
+    m = get_object_or_404(MLModel, pk=mid, project=me.project)
+    d = _json(request)
+    m.name = str(d.get("name", m.name))[:120] or m.name
+    m.description = str(d.get("description", m.description))[:500]
+    if "labels" in d:
+        m.labels = clean_labels(d["labels"])
+    m.save()
+    engine.get_runtime(pid).update_labels(m.id, m.labels)
+    _notify(pid, "models")
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+@guarded
+def model_delete(request, pid, mid):
+    me = _member(request, pid, "upload")
+    m = get_object_or_404(MLModel, pk=mid, project=me.project)
+    engine.get_runtime(pid).drop_model(m.id)
+    m.file.delete(save=False)
+    m.delete()
+    _notify(pid, "models")
+    return JsonResponse({"ok": True})
+
+
+# ----------------------------------------------------------------------------- invites / members
+@login_required
+@require_POST
+@guarded
+def invite_create(request, pid):
+    me = _member(request, pid, "owner")
+    d = _json(request)
+    kind = Invite.DEVICE if d.get("kind") == "device" else Invite.MEMBER
+    hours = int(d.get("hours") or 0)
+    inv = Invite.objects.create(
+        project=me.project, kind=kind, created_by=request.user,
+        can_control=bool(d.get("control")), can_draw=bool(d.get("draw", True)),
+        can_stream=bool(d.get("stream")) or kind == Invite.DEVICE, can_upload=bool(d.get("upload")),
+        max_uses=int(d.get("max_uses") or 0),
+        expires_at=timezone.now() + timedelta(hours=hours) if hours else None)
+    _notify(pid, "members")
+    return JsonResponse({"ok": True, "code": inv.code, **invite_urls(request, inv)})
+
+
+@login_required
+@require_POST
+@guarded
+def invite_revoke(request, pid, iid):
+    me = _member(request, pid, "owner")
+    Invite.objects.filter(pk=iid, project=me.project).update(active=False)
+    _notify(pid, "members")
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+@guarded
+def member_update(request, pid, uid):
+    me = _member(request, pid, "owner")
+    m = get_object_or_404(Membership, project=me.project, user_id=uid)
+    if m.is_owner:
+        return JsonResponse({"ok": False, "error": "The owner's permissions cannot be changed"}, status=400)
+    d = _json(request)
+    for f in ("control", "draw", "stream", "upload"):
+        if f in d:
+            setattr(m, f"can_{f}", bool(d[f]))
+    m.save()
+    _notify(pid, "members")
+    return JsonResponse({"ok": True})
+
+
+@login_required
+@require_POST
+@guarded
+def member_remove(request, pid, uid):
+    me = _member(request, pid, "owner")
+    Membership.objects.filter(project=me.project, user_id=uid).exclude(role=Membership.OWNER).delete()
+    _kick(pid, uid)
+    return JsonResponse({"ok": True})
+
+
+# ----------------------------------------------------------------------------- QR and phone camera
+@login_required
+def qr_png(request, code):
+    inv = get_object_or_404(Invite, code=code)
+    _member(request, inv.project_id)
+    img = qrcode.make(invite_urls(request, inv)["url"], box_size=8, border=2)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return HttpResponse(buf.getvalue(), content_type="image/png")
+
+
+def camera_page(request, code):
+    inv = Invite.objects.select_related("project").filter(code=code, kind=Invite.DEVICE).first()
+    if not inv or not inv.is_valid():
+        return render(request, "studio/camera.html", {"error": "The link is invalid or has expired."})
+    return render(request, "studio/camera.html", {"project": inv.project, "code": inv.code})

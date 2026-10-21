@@ -111,3 +111,62 @@ class Model:
             ii = np.iinfo(self.in_dtype)
             data = np.clip(np.round(data), ii.min, ii.max).astype(self.in_dtype)
         return data[None]
+
+    def infer(self, jpeg, brightness):
+        np = self.np
+        data = self.prepare(jpeg, brightness)
+        self.it.set_tensor(self.inp["index"], data)
+        t = time.perf_counter()
+        self.it.invoke()
+        ms = (time.perf_counter() - t) * 1000
+        raw = self.it.get_tensor(self.out["index"])[0].astype(np.float32)
+        if self.out_scale:
+            grid = (raw - self.out_zp) * self.out_scale
+        elif self.out["dtype"] != np.float32:
+            grid = raw / 255.0
+        else:
+            grid = raw
+        return np.ascontiguousarray(grid, dtype="<f4"), ms
+
+
+def main():
+    if len(sys.argv) > 2 and sys.argv[1] == "--inspect":
+        m = Model(sys.argv[2], 1)
+        _OUT.write((json.dumps(m.info()) + "\n").encode())
+        _OUT.flush()
+        return
+    kind, payload = recv()
+    cfg = json.loads(payload)
+    model = Model(cfg["model_path"], cfg.get("cores", 1))
+    send(b"I", json.dumps(model.info()).encode())
+    pct, cores = cfg.get("cpu_percent", 100), max(1, cfg.get("cores", 1))
+    while True:
+        kind, p = recv()
+        if kind == b"Q":
+            return
+        if kind != b"F":
+            continue
+        w0, c0 = time.perf_counter(), time.process_time()
+        try:
+            grid, ms = model.infer(p[2:], struct.unpack(">H", p[:2])[0])
+        except MemoryError:
+            raise
+        except Exception as e:  # noqa
+            send(b"E", f"{type(e).__name__}: {e}".encode())
+            continue
+        head = json.dumps({"ms": ms, "shape": list(grid.shape)}).encode()
+        send(b"R", struct.pack(">I", len(head)) + head + grid.tobytes())
+        if pct < 100:  # soft CPU cap on top of the hard one (Job Object / cpu.max)
+            sleep = (time.process_time() - c0) / (pct / 100.0 * cores) - (time.perf_counter() - w0)
+            if sleep > 0:
+                time.sleep(min(sleep, 2.0))
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except EOFError:
+        pass  # the manager has exited
+    except MemoryError:
+        log("MemoryError: not enough memory within the limit")
+        sys.exit(3)

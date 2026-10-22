@@ -828,3 +828,416 @@ input[type='range'] {
   font-size: 12px;
   color: var(--mute);
 }
+
+.chart b {
+  color: var(--ink);
+  font-family: var(--mono);
+}
+
+.chart canvas {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.console {
+  background: #0b0f13;
+  color: #c6d0d6;
+  border-radius: 8px;
+  font: 12px/1.5 var(--mono);
+  overflow: auto;
+  padding: 8px 10px;
+  min-height: 0;
+}
+
+.console .INFO {
+  color: #8fd3c9;
+}
+
+.console .DEBUG {
+  color: #7d8a94;
+}
+
+.console .ERROR {
+  color: #ff8a65;
+}
+
+.console .WARN {
+  color: #ffd166;
+}
+
+.qrbox {
+  text-align: center;
+}
+
+.qrbox img {
+  width: 220px;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.qrbox code {
+  display: block;
+  word-break: break-all;
+  font: 12px var(--mono);
+  margin: 8px 0;
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 8px;
+  z-index: 50;
+}
+
+.scrim {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+
+  .side {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(350px, 88vw);
+    z-index: 30;
+    transform: translateX(-100%);
+    transition: transform 0.2s;
+  }
+
+  .app.open .side {
+    transform: none;
+  }
+
+  .app.open .scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: #0007;
+    z-index: 20;
+  }
+
+  .burger {
+    display: inline-flex;
+  }
+
+  .perf {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .charts {
+    height: 200px;
+  }
+
+  .console {
+    height: 130px;
+  }
+
+  .tools {
+    flex-wrap: wrap;
+    border-radius: 14px;
+    width: calc(100% - 20px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+.cam {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: flex;
+  flex-direction: column;
+}
+
+.cam .frame2 {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.cam video,
+.cam canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cam .ctl {
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  background: #0b0f13;
+  color: #c6d0d6;
+  align-items: center;
+  padding-bottom: max(12px, env(safe-area-inset-bottom));
+}
+
+details.sec {
+  margin: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+details.sec[open] {
+  padding-bottom: 12px;
+}
+
+summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+details.sec > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--mute);
+}
+
+details.sec[open] > summary {
+  color: var(--ink);
+}
+
+details.sec > summary:hover {
+  color: var(--ink);
+}
+
+details > summary::after {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.15s;
+  margin: 0 3px 0 8px;
+  flex: none;
+}
+
+details[open] > summary::after {
+  transform: rotate(-135deg) translate(-2px, -2px);
+}
+
+details.sec > summary .cnt {
+  margin-right: auto;
+  margin-left: 6px;
+  font-weight: 400;
+}
+
+details.user {
+  display: block;
+  padding: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+details.user > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  color: var(--ink);
+  font-weight: 400;
+}
+
+details.user > summary small,
+.user small {
+  color: var(--mute);
+  font-size: 12px;
+}
+
+details.user[open] {
+  padding-bottom: 10px;
+}
+
+.panels {
+  padding: 4px 16px 14px;
+}
+
+.mrow {
+  border: 0;
+  background: none;
+  padding: 7px 8px;
+  border-radius: 6px;
+}
+
+.mrow:hover {
+  background: #0000000a;
+}
+
+.mrow.sel {
+  background: #ff5a1f14;
+  box-shadow: inset 2px 0 0 var(--signal);
+}
+
+.user {
+  border-bottom: 1px solid var(--line);
+}
+
+.side-head {
+  border-bottom: 0;
+}
+
+.perf {
+  height: clamp(210px, 31vh, 300px);
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  overflow: hidden;
+}
+
+.charts {
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 0;
+}
+
+.chart {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.chart > div {
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.chart > div span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.chart > div b {
+  flex: none;
+}
+
+.chart canvas {
+  flex: 1 1 0;
+  height: 0;
+  min-height: 0;
+  width: 100%;
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .perf {
+    height: auto;
+  }
+
+  .charts {
+    height: 260px;
+  }
+
+  .console {
+    height: 140px;
+  }
+}
+
+@media (min-width: 861px) {
+  .auth {
+    height: 100dvh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .hero {
+    min-height: 0;
+    overflow: hidden;
+    padding: clamp(24px, 5vh, 48px) clamp(28px, 4vw, 56px);
+  }
+
+  .hero h1 {
+    font-size: clamp(26px, min(3.4vw, 5.2vh), 46px);
+    margin-bottom: clamp(8px, 2vh, 18px);
+  }
+
+  .fomo-grid {
+    width: min(100%, 420px, 32vh);
+    margin-top: clamp(12px, 3vh, 32px);
+  }
+
+  .auth-side {
+    min-height: 0;
+    overflow: auto;
+  }
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.ic {
+  width: 1.15em;
+  height: 1.15em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+.ic.big {
+  width: 34px;
+  height: 34px;
+  opacity: 0.85;
+  margin-bottom: 4px;
+}
+
+.btn.icon {
+  padding: 8px;
+  justify-content: center;
+}
+
+.btn.icon .ic {
+  width: 18px;
+  height: 18px;
+}
+
+.btn.ghost {
+  border-color: transparent;
+  background: none;
+}
+
+.btn.ghost:hover {
+  background: #00000010;
+  border-color: transparent;
+}
+
+.btn.sm.icon {
+  padding: 5px;
+}
+
+.topbar h1 .ic {
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  color: var(--signal);
+  vertical-align: -0.25em;
+}

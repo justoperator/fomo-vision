@@ -6,18 +6,15 @@ from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Settings are read from the `.env` file next to manage.py (see .env.example).
-# Variables that are already set in the real environment take priority over the file.
 load_dotenv(BASE_DIR / ".env")
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
-# For ngrok/Cloudflare/your own domain: CSRF_ORIGINS="https://xxx.ngrok-free.app"
 CSRF_TRUSTED_ORIGINS = [o for o in os.environ.get("CSRF_ORIGINS", "").split(",") if o]
 
 INSTALLED_APPS = [
-    "daphne",  # must be FIRST so runserver uses ASGI (WebSocket)
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -56,9 +53,6 @@ TEMPLATES = [{
     ]},
 }]
 
-# ---- Database. The engine and connection come from .env:
-#   DB_ENGINE=django.db.backends.mysql      (default: SQLite, a single db.sqlite3 file)
-#   DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
 DB_ENGINE = os.environ.get("DB_ENGINE", "django.db.backends.sqlite3")
 
 if DB_ENGINE == "django.db.backends.sqlite3":
@@ -76,8 +70,8 @@ else:
     }}
     if "mysql" in DB_ENGINE:
         DATABASES["default"]["OPTIONS"] = {
-            "charset": "utf8mb4",                                  # full Unicode (Cyrillic, emoji)
-            "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",  # reject bad data instead of cutting it
+            "charset": "utf8mb4",
+            "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",
         }
 
 REDIS_URL = os.environ.get("REDIS_URL")
@@ -106,7 +100,7 @@ STORAGES = {
 }
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"  # uploaded .tflite models are stored here
+MEDIA_ROOT = BASE_DIR / "media"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 
@@ -114,6 +108,5 @@ LOGIN_URL = "/accounts/"
 LOGIN_REDIRECT_URL = "/projects/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-# ---- Model (worker) resource limits
-FOMO_MAX_RAM_MB = int(os.environ.get("FOMO_MAX_RAM_MB", "100"))      # ceiling that can be set in the UI
-FOMO_HARD_MEMORY = os.environ.get("FOMO_HARD_MEMORY", "1") == "1"    # 0 = watchdog only (no Job/cgroup RAM limit)
+FOMO_MAX_RAM_MB = int(os.environ.get("FOMO_MAX_RAM_MB", "100"))
+FOMO_HARD_MEMORY = os.environ.get("FOMO_HARD_MEMORY", "1") == "1"

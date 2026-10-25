@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · FOMO Studio{% endblock %}
+{% block body %}
+{% comment %}ic(name) = <svg class="ic"><use href="#i-name"/></svg>{% endcomment %}
+<div class="app" id="app">
+<aside class="side">
+  <div class="side-head"><a class="btn icon ghost" href="{% url 'projects' %}" title="Back to projects" aria-label="Back to projects"><svg class="ic"><use href="#i-back"/></svg></a><b>{{ project.name }}</b></div>
+  <nav class="nav" role="tablist">
+    <button role="tab" data-tab="model" aria-selected="true"><svg class="ic"><use href="#i-box"/></svg>Model</button>
+    <button role="tab" data-tab="funcs" aria-selected="false"><svg class="ic"><use href="#i-sliders"/></svg>Features</button>
+    <button role="tab" data-tab="members" aria-selected="false"><svg class="ic"><use href="#i-users"/></svg>Members</button>
+  </nav>
+  <div class="panels">
+    <!-- MODEL -->
+    <section class="panel" id="p-model">
+      <details class="sec" open><summary><svg class="ic"><use href="#i-box"/></svg>Models</summary>
+        <div id="models"></div>
+        <div class="row"><span class="pill" id="mstate">no model</span><span class="grow"></span>
+          <button class="btn sm" id="btn-unload" data-need="control"><svg class="ic"><use href="#i-x"/></svg>Unload</button></div></details>
+      <details class="sec" id="labsec" hidden><summary><svg class="ic"><use href="#i-tag"/></svg>Objects &amp; descriptions</summary>
+        <div id="labels"></div>
+        <div class="row"><button class="btn sm primary" id="btn-savelabels" data-need="upload"><svg class="ic"><use href="#i-save"/></svg>Save</button>
+        <button class="btn sm danger" id="btn-delmodel" data-need="upload"><svg class="ic"><use href="#i-trash"/></svg>Delete model</button></div></details>
+      <details class="sec" open><summary><svg class="ic"><use href="#i-eye"/></svg>In frame now</summary><div id="now" class="hint">Nothing detected</div></details>
+      <details class="sec" data-need="upload"><summary><svg class="ic"><use href="#i-upload"/></svg>Upload .tflite</summary>
+        <input type="file" id="up-file" accept=".tflite">
+        <label class="f">Name</label><input type="text" id="up-name" placeholder="model_v2">
+        <label class="f">Classes, comma-separated (first is background)</label>
+        <input type="text" id="up-labels" placeholder="background, brown_block, water_block">
+        <div class="row end"><button class="btn primary" id="btn-upload"><svg class="ic"><use href="#i-upload"/></svg>Upload</button></div>
+        <div class="hint">float32 and int8/uint8 FOMO models are supported.</div></details>
+    </section>
+    <!-- FEATURES -->
+    <section class="panel" id="p-funcs" hidden>
+      <details class="sec" open><summary><svg class="ic"><use href="#i-sliders"/></svg>Detection</summary>
+        <div class="sw"><span><svg class="ic"><use href="#i-merge"/></svg>Unique objects<div class="hint">Neighbouring cells → one object</div></span><input type="checkbox" id="sw-unique" data-need="control"></div>
+        <div class="sw"><span><svg class="ic"><use href="#i-hash"/></svg>Numbering<div class="hint">Stable #1, #2… across frames</div></span><input type="checkbox" id="sw-number" data-need="control"></div>
+        <label class="f">Confidence threshold: <b id="th-val">70%</b></label>
+        <input type="range" id="range-th" min="5" max="99" value="70" data-need="control">
+        <div class="row" style="margin-top:8px"><button class="btn sm" id="btn-reset-num" data-need="control"><svg class="ic"><use href="#i-reset"/></svg>Reset numbering</button></div></details>
+      <details class="sec" open><summary><svg class="ic"><use href="#i-cpu"/></svg>Model resources</summary>
+        <label class="f">Worker RAM: <b id="lim-ram-v"></b> <span class="hint" id="lim-ram-w"></span></label><input type="range" id="lim-ram" min="2" max="100" step="1" data-need="control">
+        <label class="f">CPU: <b id="lim-cpu-v"></b> of allocated cores</label><input type="range" id="lim-cpu" min="5" max="100" step="5" data-need="control">
+        <label class="f">Cores: <b id="lim-cores-v"></b></label><input type="range" id="lim-cores" min="1" max="4" step="1" data-need="control">
+        <label class="f">Frame timeout: <b id="lim-to-v"></b></label><input type="range" id="lim-to" min="1" max="30" step="1" data-need="control">
+        <div class="row end"><button class="btn sm primary" id="btn-limits" data-need="control"><svg class="ic"><use href="#i-check"/></svg>Apply</button></div>
+        <div class="hint" id="res-status">Model not loaded</div>
+        <div class="hint">The model runs in a separate process; changing limits restarts it. The GPU is not used — TFLite runs on the CPU.</div></details>
+      <details class="sec"><summary><svg class="ic"><use href="#i-eye"/></svg>Display</summary>
+        <div class="sw"><span><svg class="ic"><use href="#i-tag"/></svg>Show object descriptions on video</span><input type="checkbox" id="sw-desc"></div>
+        <div class="sw"><span><svg class="ic"><use href="#i-activity"/></svg>Show performance</span><input type="checkbox" id="sw-perf" checked></div>
+        <div class="hint">Only for you. Brightness, drawing and fullscreen are in the bars next to the video.</div></details>
+    </section>
+    <!-- MEMBERS -->
+    <section class="panel" id="p-members" hidden>
+      <details class="sec" open><summary><svg class="ic"><use href="#i-users"/></svg>Members <span class="cnt" id="mcount"></span></summary><div id="members"></div></details>
+      <details class="sec" data-need="owner"><summary><svg class="ic"><use href="#i-qr"/></svg>Invite</summary>
+        <div class="row"><button class="btn primary grow" id="btn-phone" style="justify-content:center"><svg class="ic"><use href="#i-phone"/></svg>Connect phone (QR)</button></div>
+        <label class="f">Invite a person</label>
+        <div class="perm" style="margin:0 0 6px"><label><input type="checkbox" id="iv-control"> control</label><label><input type="checkbox" id="iv-draw" checked> drawing</label><label><input type="checkbox" id="iv-stream"> video</label><label><input type="checkbox" id="iv-upload"> models</label></div>
+        <div class="row"><select id="iv-hours"><option value="1">1 hour</option><option value="24" selected>24 hours</option><option value="168">7 days</option><option value="0">No expiry</option></select>
+        <input type="number" id="iv-max" min="0" value="0" title="Max uses (0 = unlimited)" style="width:90px"></div>
+        <div class="row end"><button class="btn" id="btn-invite"><svg class="ic"><use href="#i-qr"/></svg>Create QR &amp; code</button></div></details>
+      <details class="sec" data-need="owner"><summary><svg class="ic"><use href="#i-key"/></svg>Active invites</summary><div id="invites"></div></details>
+      <details class="sec" data-need="owner"><summary><svg class="ic"><use href="#i-alert"/></svg>Danger zone</summary>
+        <form method="post" action="{% url 'project_delete' project.id %}" onsubmit="return confirm('Delete the project with all its models?')">{% csrf_token %}<button class="btn danger sm"><svg class="ic"><use href="#i-trash"/></svg>Delete project</button></form></details>
+      <details class="sec" data-nowner><summary><svg class="ic"><use href="#i-door"/></svg>Leave project</summary>
+        <div class="hint">You will lose access. You can only come back with a new invite.</div>
+        <form method="post" action="{% url 'project_leave' project.id %}" onsubmit="return confirm('Leave this project?')">{% csrf_token %}<button class="btn danger sm"><svg class="ic"><use href="#i-door"/></svg>Disconnect from project</button></form></details>
+    </section>
+  </div>
+  <div class="side-foot">
+    <form class="row" method="post" action="{% url 'join_code' %}">{% csrf_token %}<input type="text" name="code" placeholder="Project code" required autocomplete="off"><button class="btn"><svg class="ic"><use href="#i-key"/></svg>Join</button></form>
+    <a class="btn" href="{% url 'profile' %}?from={{ request.path }}"><svg class="ic"><use href="#i-user"/></svg>Profile · {{ request.user.username }}</a>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>

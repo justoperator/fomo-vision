@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Camera · FOMO Studio{% endblock %}
+{% block body %}
+{% if error %}
+<div class="page" style="max-width:480px"><div class="card"><h3>Could not connect</h3><p>{{ error }}</p><p class="hint">Ask the project owner to create a new QR code.</p></div></div>
+{% else %}
+<div class="cam">
+  <div class="frame2"><video id="v" playsinline muted autoplay></video><canvas id="o"></canvas></div>
+  <div class="ctl">
+    <b style="font-family:var(--display);font-size:13px">{{ project.name }}</b>
+    <button class="btn primary" id="go"><svg class="ic"><use href="#i-play"/></svg>Start</button>
+    <button class="btn" id="stop"><svg class="ic"><use href="#i-pause"/></svg>Stop</button>
+    <button class="btn" id="flip"><svg class="ic"><use href="#i-flip"/></svg>Camera</button>
+    <span id="st" class="hint" style="color:#9aa7b0">Ready</span>
+  </div>
+</div>
+<script>window.CAM={pid:{{ project.id }},code:"{{ code|escapejs }}"};</script>
+{% load static %}<script src="{% static 'js/camera.js' %}?v={{ asset_v }}"></script>
+{% endif %}
+{% endblock %}

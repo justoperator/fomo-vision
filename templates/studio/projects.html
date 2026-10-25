@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Projects · FOMO Studio{% endblock %}
+{% block body %}
+<div class="page">
+  <div class="topbar">
+    <h1><svg class="ic "><use href="#i-folder"/></svg>My projects</h1>
+    <div class="row">
+      <a class="btn" href="{% url 'profile' %}"><svg class="ic "><use href="#i-user"/></svg><span class="lbl">{{ request.user.username }}</span></a>
+      <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn" title="Sign out"><svg class="ic "><use href="#i-logout"/></svg><span class="lbl">Sign out</span></button></form>
+    </div>
+  </div>
+  {% for m in messages %}<div class="flash {{ m.tags }}">{{ m }}</div>{% endfor %}
+  <div class="toolbar">
+    <form method="get"><input type="search" name="q" value="{{ q }}" placeholder="Search by name or description"><button class="btn"><svg class="ic "><use href="#i-search"/></svg>Search</button></form>
+    <button class="btn" onclick="document.getElementById('dj').showModal()"><svg class="ic "><use href="#i-key"/></svg>Join with a code</button>
+    <button class="btn primary" onclick="document.getElementById('dc').showModal()"><svg class="ic "><use href="#i-plus"/></svg>New project</button>
+  </div>
+  {% if items %}
+  <div class="plist">
+    {% for it in items %}
+    <a class="pcard" href="{% url 'workspace' it.p.id %}">
+      <h3>{{ it.p.name }}</h3><p>{{ it.p.description|default:"No description" }}</p>
+      <div class="meta"><span><svg class="ic "><use href="#i-box"/></svg>{{ it.p.n_models }}</span><span><svg class="ic "><use href="#i-users"/></svg>{{ it.p.n_members }}</span><span>{% if it.role == 'owner' %}<svg class="ic "><use href="#i-crown"/></svg>owner{% else %}<svg class="ic "><use href="#i-user"/></svg>member{% endif %}</span></div>
+    </a>{% endfor %}
+  </div>
+  {% else %}
+  <div class="empty"><svg class="ic big"><use href="#i-folder"/></svg><br>{% if q %}No projects match “{{ q }}”.{% else %}No projects yet. Create your first one or enter an invite code.{% endif %}</div>
+  {% endif %}
+</div>
+<dialog id="dc"><form method="post" action="{% url 'project_create' %}">{% csrf_token %}
+  <h3>New project</h3>
+  <label class="f">Name</label><input type="text" name="name" required maxlength="120" placeholder="e.g. Brick sorter">
+  <label class="f">Description</label><textarea name="description" rows="3" maxlength="500" placeholder="What is this project for?"></textarea>
+  <div class="row end"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary"><svg class="ic "><use href="#i-plus"/></svg>Create</button></div>
+</form></dialog>
+<dialog id="dj"><form method="post" action="{% url 'join_code' %}">{% csrf_token %}
+  <h3>Join with a code</h3>
+  <label class="f">Invite code</label><input type="text" name="code" required autocomplete="off" placeholder="Paste the invite code">
+  <div class="row end"><button type="button" class="btn" onclick="this.closest('dialog').close()">Cancel</button><button class="btn primary"><svg class="ic "><use href="#i-key"/></svg>Join</button></div>
+</form></dialog>
+{% endblock %}

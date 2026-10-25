@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Profile · FOMO Studio{% endblock %}
+{% block body %}
+<div class="page" style="max-width:560px">
+  <div class="topbar"><h1><svg class="ic "><use href="#i-user"/></svg>Profile</h1><a class="btn" href="{{ next }}"><svg class="ic "><use href="#i-back"/></svg>Back</a></div>
+  {% for m in messages %}<div class="flash {{ m.tags }}">{{ m }}</div>{% endfor %}
+  <form class="card" method="post">{% csrf_token %}<input type="hidden" name="action" value="info">
+    <label class="f">Username</label><input type="text" value="{{ request.user.username }}" disabled>
+    <label class="f">First name</label><input type="text" name="first_name" placeholder="Your name" value="{{ request.user.first_name }}">
+    <label class="f">Email</label><input type="email" name="email" placeholder="you@example.com" value="{{ request.user.email }}">
+    <div class="row end"><button class="btn primary"><svg class="ic "><use href="#i-save"/></svg>Save</button></div>
+  </form>
+  <form class="card" method="post">{% csrf_token %}<h3 style="margin:0"><svg class="ic "><use href="#i-lock"/></svg>Change password</h3>
+    {% for e in form.non_field_errors %}<div class="flash error">{{ e }}</div>{% endfor %}
+    {% for f in form %}<label class="f">{{ f.label }}</label>{{ f }}{% for e in f.errors %}<div class="flash error">{{ e }}</div>{% endfor %}{% endfor %}
+    <div class="row end"><button class="btn primary"><svg class="ic "><use href="#i-lock"/></svg>Change password</button></div>
+  </form>
+  <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="btn danger"><svg class="ic "><use href="#i-logout"/></svg>Sign out</button></form>
+</div>
+<style>.card input{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px}</style>
+{% endblock %}

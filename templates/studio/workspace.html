@@ -75,3 +75,65 @@
   </div>
 </aside>
 <div class="scrim" id="scrim"></div>
+
+<main class="main">
+  <div class="bar">
+    <button class="btn icon burger" id="burger" aria-label="Menu"><svg class="ic"><use href="#i-menu"/></svg></button>
+    <b class="ptitle">{{ project.name }}</b>
+    <a class="btn icon acct" href="{% url 'profile' %}?from={{ request.path }}" title="Profile" aria-label="Profile"><svg class="ic"><use href="#i-user"/></svg></a>
+    <span class="brk"></span>
+    <div class="grp" role="group" aria-label="Video source">
+      <button class="btn" id="btn-cam" data-need="stream" title="PC camera"><svg class="ic"><use href="#i-camera"/></svg><span class="lbl">Camera</span></button>
+      <button class="btn" id="btn-file" data-need="stream" title="Photo or video from a file"><svg class="ic"><use href="#i-image"/></svg><span class="lbl">File</span></button>
+      <button class="btn" id="btn-phone2" data-need="owner" title="Connect a phone via QR"><svg class="ic"><use href="#i-phone"/></svg><span class="lbl">Phone</span></button>
+    </div>
+    <div class="grp" role="group" aria-label="Stream controls">
+      <button class="btn" id="btn-pause" disabled title="Pause the stream"><svg class="ic" id="ic-pause"><use href="#i-pause"/></svg><span class="lbl" id="pause-lbl">Pause</span></button>
+      <button class="btn" id="btn-reset" title="Clear the photo/video/stream from the screen"><svg class="ic"><use href="#i-reset"/></svg><span class="lbl">Reset</span></button>
+    </div>
+    <button class="btn" id="btn-model" data-need="control" title="Stop / start the model" disabled><svg class="ic"><use href="#i-power"/></svg><span class="lbl" id="model-lbl">Model</span></button>
+    <span class="sp"></span>
+    <span class="status" id="status" title="Connection status"><i class="sdot"></i><span id="status-t">Connecting…</span></span>
+    <button class="btn icon" id="btn-fs" title="Fullscreen" aria-label="Fullscreen"><svg class="ic" id="ic-fs"><use href="#i-max"/></svg></button>
+    <button class="btn icon on" id="btn-mirror" title="Mirror the PC camera" aria-label="Mirror"><svg class="ic"><use href="#i-flip"/></svg></button>
+  </div>
+  <div class="stagearea" id="stagearea">
+    <div class="placeholder" id="ph"></div>
+    <div class="frame" id="frame" hidden>
+      <canvas id="view"></canvas><canvas id="overlay"></canvas><canvas id="draw"></canvas>
+    </div>
+    <div class="hud" id="hud" hidden></div>
+    <div class="legend" id="legend" hidden></div>
+    <div class="tools">
+      <label class="br" title="Brightness is applied to the frame the model sees"><svg class="ic"><use href="#i-sun"/></svg><input type="range" id="range-br" min="30" max="200" value="100" aria-label="Brightness"><b id="br-val">100%</b></label>
+      <span class="vsep"></span>
+      <button class="btn sm" id="btn-draw" data-need="draw" title="Draw on video"><svg class="ic"><use href="#i-pencil"/></svg><span class="lbl">Draw</span></button>
+      <span class="dopts" id="dopts" hidden>
+        <input type="color" id="dr-color" value="#ff5a1f" aria-label="Color"><input type="range" id="dr-size" min="1" max="12" value="3" style="width:64px" aria-label="Thickness">
+        <button class="btn sm" id="btn-clear" data-need="draw" title="Erase all"><svg class="ic"><use href="#i-trash"/></svg></button>
+      </span>
+    </div>
+  </div>
+  <div class="perf" id="perf">
+    <div class="charts">
+      <div class="chart"><div><span><svg class="ic"><use href="#i-cpu"/></svg>Model CPU</span><b id="v-cpu">—</b></div><canvas id="c-cpu"></canvas></div>
+      <div class="chart"><div><span><svg class="ic"><use href="#i-layers"/></svg>Model RAM</span><b id="v-ram">—</b></div><canvas id="c-ram"></canvas></div>
+      <div class="chart"><div><span><svg class="ic"><use href="#i-activity"/></svg>FPS</span><b id="v-fps">0</b></div><canvas id="c-fps"></canvas></div>
+      <div class="chart"><div><span><svg class="ic"><use href="#i-play"/></svg>Latency</span><b id="v-lat">0 ms</b></div><canvas id="c-lat"></canvas></div>
+    </div>
+    <div class="conwrap">
+      <div class="conhead"><span><svg class="ic"><use href="#i-terminal"/></svg>Console</span><button class="btn sm ghost" id="btn-conclear" title="Clear console"><svg class="ic"><use href="#i-trash"/></svg></button></div>
+      <div class="console" id="console" aria-label="Console"></div>
+    </div>
+  </div>
+</main>
+</div>
+<dialog id="dqr"><h3 id="dqr-title">QR code</h3>
+  <div class="qrbox"><img id="dqr-img" alt="QR"><code id="dqr-url"></code><div class="hint">Code: <b id="dqr-code"></b></div></div>
+  <div class="row end"><button class="btn" id="dqr-copy"><svg class="ic"><use href="#i-copy"/></svg>Copy</button><button class="btn primary" onclick="this.closest('dialog').close()"><svg class="ic"><use href="#i-check"/></svg>Done</button></div></dialog>
+<input type="file" id="file" accept="image/*,video/*" hidden>
+<video id="src" playsinline muted style="position:absolute;width:2px;height:2px;opacity:0;pointer-events:none"></video>
+{{ perms|json_script:"perms-data" }}
+<script>window.APP={pid:{{ project.id }},me:"{{ request.user.username|escapejs }}",perms:JSON.parse(document.getElementById("perms-data").textContent)};</script>
+{% load static %}<script src="{% static 'js/workspace.js' %}?v={{ asset_v }}"></script>
+{% endblock %}

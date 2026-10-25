@@ -1,7 +1,15 @@
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
+
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Settings are read from the `.env` file next to manage.py (see .env.example).
+# Variables that are already set in the real environment take priority over the file.
+load_dotenv(BASE_DIR / ".env")
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "dev-only-change-me")
 DEBUG = os.environ.get("DJANGO_DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "*").split(",")
@@ -48,10 +56,29 @@ TEMPLATES = [{
     ]},
 }]
 
-DATABASES = {"default": {"ENGINE": "django.db.backends.sqlite3", "NAME": BASE_DIR / "db.sqlite3"}}
-# PostgreSQL:
-# DATABASES = {"default": {"ENGINE": "django.db.backends.postgresql", "NAME": "fomo", "USER": "fomo",
-#              "PASSWORD": "fomo", "HOST": "127.0.0.1", "PORT": "5432"}}
+# ---- Database. The engine and connection come from .env:
+#   DB_ENGINE=django.db.backends.mysql      (default: SQLite, a single db.sqlite3 file)
+#   DB_NAME, DB_USER, DB_PASSWORD, DB_HOST, DB_PORT
+DB_ENGINE = os.environ.get("DB_ENGINE", "django.db.backends.sqlite3")
+
+if DB_ENGINE == "django.db.backends.sqlite3":
+    DATABASES = {"default": {"ENGINE": DB_ENGINE, "NAME": BASE_DIR / "db.sqlite3"}}
+else:
+    if not os.environ.get("DB_NAME"):
+        raise ImproperlyConfigured("DB_ENGINE is set, but DB_NAME is missing (check your .env file).")
+    DATABASES = {"default": {
+        "ENGINE": DB_ENGINE,
+        "NAME": os.environ["DB_NAME"],
+        "USER": os.environ.get("DB_USER", ""),
+        "PASSWORD": os.environ.get("DB_PASSWORD", ""),
+        "HOST": os.environ.get("DB_HOST", "127.0.0.1"),
+        "PORT": os.environ.get("DB_PORT", ""),
+    }}
+    if "mysql" in DB_ENGINE:
+        DATABASES["default"]["OPTIONS"] = {
+            "charset": "utf8mb4",                                  # full Unicode (Cyrillic, emoji)
+            "init_command": "SET sql_mode='STRICT_TRANS_TABLES'",  # reject bad data instead of cutting it
+        }
 
 REDIS_URL = os.environ.get("REDIS_URL")
 if REDIS_URL:

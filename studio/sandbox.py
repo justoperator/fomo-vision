@@ -18,6 +18,7 @@ import subprocess
 import sys
 import threading
 import time
+import tempfile
 
 import numpy as np
 import psutil
@@ -64,10 +65,40 @@ def _flags():
     return getattr(subprocess, "CREATE_NO_WINDOW", 0) if IS_WIN else 0
 
 
+def _ascii_model_copy(path):
+    """Work around TFLite runtimes that cannot open Unicode paths on Windows."""
+    if not IS_WIN or all(ord(char) < 128 for char in path):
+        return path, None
+    suffix = os.path.splitext(path)[1] or ".tflite"
+    handle, copy_path = tempfile.mkstemp(prefix="fomo_model_", suffix=suffix)
+    os.close(handle)
+    try:
+        shutil.copyfile(path, copy_path)
+    except Exception:
+        try:
+            os.unlink(copy_path)
+        except OSError:
+            pass
+        raise
+    return copy_path, copy_path
+
+
 def inspect_model(path):
     """Reads .tflite parameters in a short-lived subprocess (the main server never imports TF)."""
-    r = subprocess.run([sys.executable, WORKER, "--inspect", path], capture_output=True, timeout=180,
-                       env=_env(), creationflags=_flags())
+    if not path or not os.path.isfile(path):
+        raise FileNotFoundError(f"Model file does not exist: {path}")
+    if os.path.getsize(path) == 0:
+        raise ValueError(f"Model file is empty: {path}")
+    runtime_path, temporary_path = _ascii_model_copy(path)
+    try:
+        r = subprocess.run([sys.executable, WORKER, "--inspect", runtime_path], capture_output=True, timeout=180,
+                           env=_env(), creationflags=_flags())
+    finally:
+        if temporary_path:
+            try:
+                os.unlink(temporary_path)
+            except OSError:
+                pass
     lines = r.stdout.decode("utf-8", "replace").strip().splitlines()
     if r.returncode != 0 or not lines:
         raise RuntimeError(r.stderr.decode("utf-8", "replace").strip()[-400:] or "the worker did not respond")
@@ -196,7 +227,15 @@ def _cg_create(limits, tag):
 # ----------------------------------------------------------------------------- worker
 class ModelWorker:
     def __init__(self, model_path, limits, log):
-        self.path, self.limits, self.log = model_path, clamp_limits(limits), log
+        if not model_path or not os.path.isfile(model_path):
+            raise WorkerError(f"Model file does not exist: {model_path}")
+        if os.path.getsize(model_path) == 0:
+            raise WorkerError(f"Model file is empty: {model_path}")
+        try:
+            self.path, self._temporary_path = _ascii_model_copy(model_path)
+        except OSError as exc:
+            raise WorkerError(f"Could not prepare model file: {exc}") from exc
+        self.limits, self.log = clamp_limits(limits), log
         self.q = queue.Queue()
         self.lock = threading.Lock()
         self.proc = self.ps = None
@@ -444,6 +483,12 @@ class ModelWorker:
                 except OSError:
                     time.sleep(0.05)
             self._cg = None
+        if self._temporary_path:
+            try:
+                os.unlink(self._temporary_path)
+            except OSError:
+                pass
+            self._temporary_path = None
 
     def stats(self):
         return {"alive": self.alive(), "rss_mb": round(self.uss, 1), "peak_mb": round(self.peak, 1),

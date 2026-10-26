@@ -106,7 +106,8 @@ STORAGES = {
 }
 
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", str(BASE_DIR / "media"))).expanduser().resolve()
+MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
 DATA_UPLOAD_MAX_MEMORY_SIZE = 200 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024
 

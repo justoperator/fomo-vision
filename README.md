@@ -1,6 +1,6 @@
 # FOMO Studio
 
-FOMO Studio is a self-hosted web workspace for running FOMO object-detection models on live video. Upload a `.tflite` model, connect a camera or phone, and review detections, performance, and logs in one shared project.
+FOMO Studio is a web application for running FOMO object-detection models on live video. Upload a `.tflite` model, connect a camera or phone, and review detections, performance, and logs in one shared project.
 
 ![FOMO Studio workspace](demo/project_page.png)
 
@@ -60,7 +60,47 @@ Important settings:
 | `FOMO_HARD_MEMORY` | Enforce the worker memory limit | `1` |
 | `MEDIA_ROOT` | Uploaded model directory | `./media` |
 
-Set `DJANGO_DEBUG=0`, a strong `DJANGO_SECRET_KEY`, explicit `ALLOWED_HOSTS`, and production email/database settings before deploying.
+### Email verification
+
+The application sends one-time verification codes through SMTP. For Gmail, enable 2-Step Verification, create an App Password, and set:
+
+```env
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USE_TLS=1
+EMAIL_HOST_USER=your.address@gmail.com
+EMAIL_HOST_PASSWORD=your-16-character-app-password
+DEFAULT_FROM_EMAIL=FOMO Studio <your.address@gmail.com>
+```
+
+Restart the application after changing `.env`. For another provider, use its SMTP host, port, TLS setting, username, and password.
+
+### Google sign-in and ngrok
+
+Google OAuth and phone camera access need a public HTTPS URL. Run the application locally, then start ngrok:
+
+```bash
+ngrok http 8000
+```
+
+Copy the HTTPS forwarding URL, for example `https://example.ngrok-free.app`, and update `.env`:
+
+```env
+DJANGO_DEBUG=1
+ALLOWED_HOSTS=example.ngrok-free.app,localhost,127.0.0.1
+CSRF_ORIGINS=https://example.ngrok-free.app
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+```
+
+In Google Cloud Console, configure the OAuth client as follows:
+
+- **Authorized JavaScript origins:** `https://example.ngrok-free.app`
+- **Authorized redirect URI:** `https://example.ngrok-free.app/accounts/complete/google-oauth2/`
+
+The ngrok URL changes between sessions unless you use a reserved domain. Update both Google Cloud Console and `.env` when the URL changes.
+
+Set `DJANGO_DEBUG=0`, a strong `DJANGO_SECRET_KEY`, explicit `ALLOWED_HOSTS`, and production email/database settings before deployment.
 
 ## Models
 

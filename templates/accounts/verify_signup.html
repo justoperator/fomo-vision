@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}Confirm your email · FOMO Studio{% endblock %}
+{% block body %}
+<main class="auth">
+  <section class="auth-side" style="grid-column: 1 / -1">
+    <div class="auth-card">
+      <div class="brand m-brand" style="display:block"><i></i>FOMO Studio</div>
+      <h2>Confirm your email</h2>
+      <p class="sub">We sent a 6-digit code to {{ email }}. It is valid for 5 minutes.</p>
+      {% for error in errors %}<div class="flash error">{{ error }}</div>{% endfor %}
+      <form method="post">{% csrf_token %}
+        <label class="f" for="code">Confirmation code</label>
+        <div class="fld"><svg class="ic "><use href="#i-lock"/></svg><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus></div>
+        <button class="btn primary" type="submit">Confirm email</button>
+      </form>
+      <p class="sub"><a href="{% url 'auth' %}?tab=signup">Start over</a></p>
+    </div>
+  </section>
+</main>
+{% endblock %}

@@ -281,6 +281,13 @@ label.f {
   padding: 12px;
 }
 
+.auth-card .btn.google {
+  width: 100%;
+  justify-content: center;
+  margin-top: 10px;
+  background: #fff;
+}
+
 @media (max-width: 860px) {
   .auth {
     grid-template-columns: 1fr;

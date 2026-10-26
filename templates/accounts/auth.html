@@ -26,6 +26,7 @@
         <label class="f" for="l-u">Username</label><div class="fld"><svg class="ic "><use href="#i-user"/></svg><input id="l-u" placeholder="Username" type="text" name="username" value="{% if tab != 'signup' %}{{ form.username }}{% endif %}" autocomplete="username" required></div>
         <label class="f" for="l-p">Password</label><div class="fld"><svg class="ic "><use href="#i-lock"/></svg><input id="l-p" placeholder="Password" type="password" name="password" autocomplete="current-password" required><button type="button" class="pw" data-for="l-p" aria-label="Show password"><svg class="ic "><use href="#i-eye"/></svg></button></div>
         <button class="btn primary"><svg class="ic "><use href="#i-login"/></svg>Sign in</button>
+        <a class="btn google" href="{% url 'social:begin' 'google-oauth2' %}?next={{ next|urlencode }}">Continue with Google</a>
       </form>
       <form method="post" id="f-signup" {% if tab != 'signup' %}hidden{% endif %}>{% csrf_token %}
         <input type="hidden" name="action" value="signup"><input type="hidden" name="next" value="{{ next }}">
@@ -34,6 +35,7 @@
         <label class="f" for="s-e">Email</label><div class="fld"><svg class="ic "><use href="#i-mail"/></svg><input id="s-e" placeholder="you@example.com" type="email" name="email" value="{{ form.email }}" autocomplete="email" required></div>
         <label class="f" for="s-p">Password</label><div class="fld"><svg class="ic "><use href="#i-lock"/></svg><input id="s-p" placeholder="At least 6 characters" type="password" name="password" autocomplete="new-password" required minlength="6"><button type="button" class="pw" data-for="s-p" aria-label="Show password"><svg class="ic "><use href="#i-eye"/></svg></button></div>
         <button class="btn primary"><svg class="ic "><use href="#i-userplus"/></svg>Create account</button>
+        <a class="btn google" href="{% url 'social:begin' 'google-oauth2' %}?next={{ next|urlencode }}">Sign up with Google</a>
       </form>
     </div>
   </section>

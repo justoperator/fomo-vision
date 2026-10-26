@@ -7,3 +7,6 @@ numpy>=1.26
 Pillow>=10.0
 qrcode>=7.4
 ai-edge-litert
+pyotp>=2.9
+resend>=2.0
+social-auth-app-django>=5.4

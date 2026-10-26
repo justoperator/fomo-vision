@@ -239,6 +239,25 @@ label.f {
   max-width: 400px;
 }
 
+.auth-panel[hidden] {
+  display: none;
+}
+
+.auth-panel {
+  animation: auth-panel-in 180ms ease-out;
+}
+
+@keyframes auth-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 .tabs {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -286,6 +305,14 @@ label.f {
   justify-content: center;
   margin-top: 10px;
   background: #fff;
+}
+
+.auth-card .google-form {
+  margin: 0;
+}
+
+.verify-back {
+  margin-top: 16px !important;
 }
 
 @media (max-width: 860px) {

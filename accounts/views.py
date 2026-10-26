@@ -31,10 +31,52 @@ def auth_view(request):
     next_url = request.POST.get("next") or request.GET.get("next") or ""
     if request.user.is_authenticated:
         return redirect(_safe_next(request, next_url))
-    ctx = {"tab": request.GET.get("tab", "login"), "next": next_url, "errors": [], "form": {}}
+    pending_token = request.session.get("pending_signup_token")
+    pending = get_pending_signup(pending_token) if pending_token else None
+    initial_tab = "verify" if pending else request.GET.get("tab", "login")
+    ctx = {
+        "tab": initial_tab,
+        "next": next_url,
+        "errors": [],
+        "form": {},
+        "pending_email": pending["data"]["email"] if pending else "",
+    }
 
     if request.method == "POST":
         action = request.POST.get("action")
+        if action == "verify":
+            if not pending:
+                request.session.pop("pending_signup_token", None)
+                ctx["tab"] = "signup"
+                ctx["errors"].append("This confirmation request has expired. Please sign up again.")
+                return render(request, "accounts/auth.html", ctx)
+            code = request.POST.get("code", "").strip()
+            ctx["tab"] = "verify"
+            if not code.isdigit() or len(code) != 6:
+                ctx["errors"].append("Enter the 6-digit code from your email.")
+            elif not pyotp.TOTP(pending["secret"], interval=OTP_INTERVAL).verify(code):
+                ctx["errors"].append("The code is incorrect or has expired.")
+            else:
+                data = pending["data"]
+                try:
+                    with transaction.atomic():
+                        user = User.objects.create_user(
+                            username=data["username"],
+                            email=data["email"],
+                        )
+                        user.password = data["password_hash"]
+                        user.save(update_fields=["password"])
+                except IntegrityError:
+                    ctx["errors"].append(
+                        "This username or email was registered while you were confirming."
+                    )
+                else:
+                    delete_pending_signup(pending_token)
+                    request.session.pop("pending_signup_token", None)
+                    login(request, user, backend="django.contrib.auth.backends.ModelBackend")
+                    return redirect(_safe_next(request, data.get("next", "")))
+            return render(request, "accounts/auth.html", ctx)
+
         username = request.POST.get("username", "").strip()
         email = request.POST.get("email", "").strip().lower()
         password = request.POST.get("password", "")
@@ -86,48 +128,15 @@ def auth_view(request):
                     errors.append(f"Could not send the confirmation email: {exc}")
                 else:
                     request.session["pending_signup_token"] = token
-                    return redirect("verify_signup")
+                    ctx["tab"] = "verify"
+                    ctx["pending_email"] = email
+                    return render(request, "accounts/auth.html", ctx)
             ctx["errors"] = errors
     return render(request, "accounts/auth.html", ctx)
 
 
 def verify_signup_view(request):
-    token = request.session.get("pending_signup_token")
-    pending = get_pending_signup(token) if token else None
-    if not pending:
-        request.session.pop("pending_signup_token", None)
-        return redirect("auth")
-
-    errors = []
-    if request.method == "POST":
-        code = request.POST.get("code", "").strip()
-        if not code.isdigit() or len(code) != 6:
-            errors.append("Enter the 6-digit code from your email.")
-        elif not pyotp.TOTP(pending["secret"], interval=OTP_INTERVAL).verify(code):
-            errors.append("The code is incorrect or has expired.")
-        else:
-            data = pending["data"]
-            try:
-                with transaction.atomic():
-                    user = User.objects.create_user(
-                        username=data["username"],
-                        email=data["email"],
-                    )
-                    user.password = data["password_hash"]
-                    user.save(update_fields=["password"])
-            except IntegrityError:
-                errors.append("This username or email was registered while you were confirming.")
-            else:
-                delete_pending_signup(token)
-                request.session.pop("pending_signup_token", None)
-                login(request, user, backend="django.contrib.auth.backends.ModelBackend")
-                return redirect(_safe_next(request, data.get("next", "")))
-
-    return render(
-        request,
-        "accounts/verify_signup.html",
-        {"email": pending["data"]["email"], "errors": errors},
-    )
+    return redirect("auth")
 
 
 @require_POST

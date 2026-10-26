@@ -15,28 +15,50 @@
   <section class="auth-side">
     <div class="auth-card">
       <div class="brand m-brand"><i></i>FOMO Studio</div>
-      <div class="tabs" role="tablist">
+      <div class="tabs" role="tablist" {% if tab == 'verify' %}hidden{% endif %}>
         <button type="button" role="tab" id="t-login" aria-selected="{% if tab != 'signup' %}true{% else %}false{% endif %}"><svg class="ic "><use href="#i-login"/></svg>Login</button>
         <button type="button" role="tab" id="t-signup" aria-selected="{% if tab == 'signup' %}true{% else %}false{% endif %}"><svg class="ic "><use href="#i-userplus"/></svg>Sign up</button>
       </div>
       {% for e in errors %}<div class="flash error">{{ e }}</div>{% endfor %}
-      <form method="post" id="f-login" {% if tab == 'signup' %}hidden{% endif %}>{% csrf_token %}
+      <div class="auth-panel" id="p-login" {% if tab != 'login' %}hidden{% endif %}>
+      <form method="post" id="f-login">{% csrf_token %}
         <input type="hidden" name="action" value="login"><input type="hidden" name="next" value="{{ next }}">
         <h2>Welcome back</h2><p class="sub">Sign in to open your projects.</p>
         <label class="f" for="l-u">Username</label><div class="fld"><svg class="ic "><use href="#i-user"/></svg><input id="l-u" placeholder="Username" type="text" name="username" value="{% if tab != 'signup' %}{{ form.username }}{% endif %}" autocomplete="username" required></div>
         <label class="f" for="l-p">Password</label><div class="fld"><svg class="ic "><use href="#i-lock"/></svg><input id="l-p" placeholder="Password" type="password" name="password" autocomplete="current-password" required><button type="button" class="pw" data-for="l-p" aria-label="Show password"><svg class="ic "><use href="#i-eye"/></svg></button></div>
         <button class="btn primary"><svg class="ic "><use href="#i-login"/></svg>Sign in</button>
-        <a class="btn google" href="{% url 'social:begin' 'google-oauth2' %}?next={{ next|urlencode }}">Continue with Google</a>
       </form>
-      <form method="post" id="f-signup" {% if tab != 'signup' %}hidden{% endif %}>{% csrf_token %}
+      <form method="post" action="{% url 'social:begin' 'google-oauth2' %}" class="google-form">
+        {% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
+        <button class="btn google" type="submit">Continue with Google</button>
+      </form>
+      </div>
+      <div class="auth-panel" id="p-signup" {% if tab != 'signup' %}hidden{% endif %}>
+      <form method="post" id="f-signup">{% csrf_token %}
         <input type="hidden" name="action" value="signup"><input type="hidden" name="next" value="{{ next }}">
         <h2>Create an account</h2><p class="sub">It only takes a minute.</p>
         <label class="f" for="s-u">Username</label><div class="fld"><svg class="ic "><use href="#i-user"/></svg><input id="s-u" placeholder="Choose a username" type="text" name="username" value="{% if tab == 'signup' %}{{ form.username }}{% endif %}" autocomplete="username" required minlength="3"></div>
         <label class="f" for="s-e">Email</label><div class="fld"><svg class="ic "><use href="#i-mail"/></svg><input id="s-e" placeholder="you@example.com" type="email" name="email" value="{{ form.email }}" autocomplete="email" required></div>
         <label class="f" for="s-p">Password</label><div class="fld"><svg class="ic "><use href="#i-lock"/></svg><input id="s-p" placeholder="At least 6 characters" type="password" name="password" autocomplete="new-password" required minlength="6"><button type="button" class="pw" data-for="s-p" aria-label="Show password"><svg class="ic "><use href="#i-eye"/></svg></button></div>
         <button class="btn primary"><svg class="ic "><use href="#i-userplus"/></svg>Create account</button>
-        <a class="btn google" href="{% url 'social:begin' 'google-oauth2' %}?next={{ next|urlencode }}">Sign up with Google</a>
       </form>
+      <form method="post" action="{% url 'social:begin' 'google-oauth2' %}" class="google-form">
+        {% csrf_token %}<input type="hidden" name="next" value="{{ next }}">
+        <button class="btn google" type="submit">Sign up with Google</button>
+      </form>
+      </div>
+      <div class="auth-panel" id="p-verify" {% if tab != 'verify' %}hidden{% endif %}>
+        <h2>Check your email</h2>
+        <p class="sub">We sent a 6-digit code to {{ pending_email }}. It is valid for 5 minutes.</p>
+        <form method="post" id="f-verify">{% csrf_token %}
+          <input type="hidden" name="action" value="verify">
+          <input type="hidden" name="next" value="{{ next }}">
+          <label class="f" for="v-code">Confirmation code</label>
+          <div class="fld"><svg class="ic "><use href="#i-lock"/></svg><input id="v-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required autofocus></div>
+          <button class="btn primary" type="submit">Confirm email</button>
+        </form>
+        <p class="sub verify-back"><a href="{% url 'auth' %}?tab=signup">Start over</a></p>
+      </div>
     </div>
   </section>
 </main>
@@ -45,8 +67,9 @@ const g=document.getElementById('grid');
 if(g){const hits=[[3,4],[4,4],[8,7],[9,7],[9,8],[6,10]];
 for(let y=0;y<12;y++)for(let x=0;x<12;x++){const s=document.createElement('span');
  if(hits.some(h=>h[0]===x&&h[1]===y))s.className='hit'; if(x===6&&y===10)s.className='hit ping'; g.append(s);}}
-const tl=document.getElementById('t-login'),ts=document.getElementById('t-signup'),fl=document.getElementById('f-login'),fs=document.getElementById('f-signup');
-function show(s){tl.setAttribute('aria-selected',!s);ts.setAttribute('aria-selected',s);fl.hidden=s;fs.hidden=!s;}
+const tl=document.getElementById('t-login'),ts=document.getElementById('t-signup');
+const pl=document.getElementById('p-login'),ps=document.getElementById('p-signup');
+function show(s){tl.setAttribute('aria-selected',!s);ts.setAttribute('aria-selected',s);pl.hidden=s;ps.hidden=!s;}
 document.querySelectorAll('.pw').forEach(b=>b.onclick=()=>{const i=document.getElementById(b.dataset.for);const h=i.type==='password';i.type=h?'text':'password';b.querySelector('use').setAttribute('href',h?'#i-eyeoff':'#i-eye');});
 tl.onclick=()=>show(false);ts.onclick=()=>show(true);
 </script>

@@ -6,10 +6,13 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 
 SELECTORS = {
+    "signup_tab": (By.ID, "t-signup"),
+    "signup_panel": (By.ID, "p-signup"),
+    "login_tab": (By.ID, "t-login"),
     "login_username": (By.ID, "l-u"),
     "login_password": (By.ID, "l-p"),
     "login_form": (By.ID, "f-login"),
-    "login_submit": (By.CSS_SELECTOR, "#f-login button[type='submit']"),
+    "login_submit": (By.CSS_SELECTOR, "#f-login > button"),
     "projects_page": (By.CSS_SELECTOR, ".topbar"),
     "new_project": (By.CSS_SELECTOR, ".toolbar button.btn.primary"),
     "project_dialog": (By.CSS_SELECTOR, "#dc[open]"),
@@ -17,8 +20,9 @@ SELECTORS = {
     "project_description": (By.CSS_SELECTOR, "#dc textarea[name='description']"),
     "project_create": (By.CSS_SELECTOR, "#dc button.btn.primary"),
     "members_tab": (By.CSS_SELECTOR, "[data-tab='members']"),
-    "danger_zone": (By.XPATH, "//summary[contains(., 'Danger zone')]"),
-    "delete_project": (By.XPATH, "//button[contains(., 'Delete project')]"),
+    "danger_zone": (By.CSS_SELECTOR, "#p-members > details:nth-child(4) > summary"),
+    "danger_zone_open": (By.CSS_SELECTOR, "#p-members > details:nth-child(4)[open]"),
+    "delete_project": (By.CSS_SELECTOR, "#p-members > details:nth-child(4)[open] > form > button"),
 }
 
 
@@ -30,6 +34,10 @@ def sign_in(driver, base_url, username, password):
     driver.get(f"{base_url}/accounts/?next=/projects/")
     wait = wait_for(driver)
 
+    # Verify the registration tab is reachable before using an existing account.
+    wait.until(expected.element_to_be_clickable(SELECTORS["signup_tab"])).click()
+    wait.until(expected.visibility_of_element_located(SELECTORS["signup_panel"]))
+    wait.until(expected.element_to_be_clickable(SELECTORS["login_tab"])).click()
     login_form = wait.until(expected.visibility_of_element_located(SELECTORS["login_form"]))
     username_field = login_form.find_element(*SELECTORS["login_username"])
     password_field = login_form.find_element(*SELECTORS["login_password"])
@@ -42,14 +50,16 @@ def sign_in(driver, base_url, username, password):
     assert password_field.get_attribute("value") == password
 
     wait.until(expected.element_to_be_clickable(SELECTORS["login_submit"])).click()
-    wait.until(expected.url_contains("/projects/"))
+    wait.until(expected.url_matches(r".*/projects/?$"))
     wait.until(expected.visibility_of_element_located(SELECTORS["projects_page"]))
 
 
 def delete_current_project(driver):
     wait = wait_for(driver)
     wait.until(expected.element_to_be_clickable(SELECTORS["members_tab"])).click()
-    wait.until(expected.element_to_be_clickable(SELECTORS["danger_zone"])).click()
+    danger_summary = wait.until(expected.element_to_be_clickable(SELECTORS["danger_zone"]))
+    danger_summary.click()
+    wait.until(expected.visibility_of_element_located(SELECTORS["danger_zone_open"]))
     delete_button = wait.until(expected.element_to_be_clickable(SELECTORS["delete_project"]))
     assert delete_button.is_displayed()
     delete_button.click()
@@ -89,9 +99,6 @@ def test_user_can_create_and_delete_project(driver, base_url, verified_user):
     assert project_name in driver.page_source
 
     try:
-        wait.until(expected.element_to_be_clickable(SELECTORS["members_tab"])).click()
-        wait.until(expected.element_to_be_clickable(SELECTORS["danger_zone"])).click()
-        assert wait.until(expected.visibility_of_element_located(SELECTORS["delete_project"])).is_displayed()
         delete_current_project(driver)
     finally:
         if "/p/" in driver.current_url:

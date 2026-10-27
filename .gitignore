@@ -5,3 +5,4 @@ media/*
 staticfiles/
 .venv/
 *.env
+.pytest_cache

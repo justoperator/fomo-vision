@@ -114,7 +114,12 @@ def project_create(request):
     if not name:
         messages.error(request, "Enter a project name.")
         return redirect("projects")
-    p = Project.objects.create(owner=request.user, name=name[:120], description=request.POST.get("description", "")[:500])
+    p = Project.objects.create(
+        owner=request.user,
+        name=name[:120],
+        description=request.POST.get("description", "")[:500],
+        is_public=False,
+    )
     Membership.objects.create(project=p, user=request.user, role=Membership.OWNER,
                               can_control=True, can_draw=True, can_stream=True, can_upload=True)
     return redirect("workspace", pid=p.id)

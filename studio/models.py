@@ -12,6 +12,7 @@ class Project(models.Model):
     owner = models.ForeignKey(User, on_delete=models.CASCADE, related_name="owned_projects")
     name = models.CharField("Name", max_length=120)
     description = models.TextField("Description", blank=True)
+    is_public = models.BooleanField(default=False)
     # {model_id, threshold, unique, numbering, ...} — persisted between runs
     settings = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)

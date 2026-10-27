@@ -48,6 +48,10 @@
       setTimeout(connectWebSocket, reconnectDelayMs);
     };
 
+    webSocket.onerror = () => {
+      statusElement.textContent = 'Could not connect to the server';
+    };
+
     webSocket.onmessage = handleWebSocketMessage;
   }
 
@@ -172,10 +176,31 @@
     }
 
     videoElement.srcObject = stream;
-    await videoElement.play();
+    try {
+      await new Promise((resolve, reject) => {
+        if (videoElement.readyState >= HTMLMediaElement.HAVE_METADATA) {
+          resolve();
+          return;
+        }
+        videoElement.addEventListener('loadedmetadata', resolve, { once: true });
+        videoElement.addEventListener('error', () => reject(new Error('Could not read the camera stream')), { once: true });
+      });
+      await videoElement.play();
+    } catch (error) {
+      stopStream();
+      statusElement.textContent = `Could not start the camera: ${error.message}`;
+      return;
+    }
+
+    if (!videoElement.videoWidth || !videoElement.videoHeight) {
+      stopStream();
+      statusElement.textContent = 'The camera returned no video frames';
+      return;
+    }
 
     if (!isRunning) {
       isRunning = true;
+      statusElement.textContent = 'Sending video…';
       processFrameLoop();
     }
 
@@ -209,9 +234,22 @@
       lastFrameSentAt = Date.now();
 
       offscreenCanvas.toBlob((blob) => {
-        if (blob) {
-          blob.arrayBuffer().then((buffer) => webSocket.send(buffer));
+        if (!blob || !webSocket || webSocket.readyState !== WebSocket.OPEN) {
+          isFrameInFlight = false;
+          return;
         }
+        blob.arrayBuffer()
+          .then((buffer) => {
+            if (webSocket && webSocket.readyState === WebSocket.OPEN) {
+              webSocket.send(buffer);
+            } else {
+              isFrameInFlight = false;
+            }
+          })
+          .catch(() => {
+            isFrameInFlight = false;
+            statusElement.textContent = 'Could not encode the camera frame';
+          });
       }, 'image/jpeg', 0.7);
     }
 

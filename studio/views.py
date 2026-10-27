@@ -6,6 +6,7 @@ from datetime import timedelta
 import qrcode
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -91,7 +92,8 @@ def ser_model(m):
 
 def invite_urls(request, inv):
     path = f"/connect/{inv.code}/" if inv.kind == Invite.DEVICE else f"/join/{inv.code}/"
-    return {"url": request.build_absolute_uri(path), "qr": f"/qr/{inv.code}.png"}
+    base_url = settings.PUBLIC_BASE_URL or request.build_absolute_uri("/").rstrip("/")
+    return {"url": f"{base_url}{path}", "qr": f"/qr/{inv.code}.png"}
 
 
 # ----------------------------------------------------------------------------- projects
